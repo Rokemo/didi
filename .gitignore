@@ -1,0 +1,37 @@
+# ===== 敏感业务数据：绝不提交（仓库公开也不泄露） =====
+*.db
+*.sqlite
+*.sqlite3
+backups/
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.log
+
+# ===== WorkBuddy 内部项目记忆/数据（非交付代码） =====
+.workbuddy/
+
+# ===== Python 缓存与临时/调试脚本 =====
+__pycache__/
+*.pyc
+*.pyo
+# 下划线前缀的临时探查/调试脚本
+_*.py
+_*.json
+_*.txt
+
+# ===== 验证/调试日志（非代码，_log / _verify_log 后缀） =====
+*_log.txt
+*_verify_log.txt
+
+# ===== tracker_web 运行时与临时文件 =====
+tracker_web/__pycache__/
+tracker_web/_*.py
+tracker_web/server.log
+tracker_web/test_proc.xlsx
+tracker_web/*.db
+
+# ===== 系统/IDE =====
+.DS_Store
+Thumbs.db

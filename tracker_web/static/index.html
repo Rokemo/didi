@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跟单进度跟踪 · 网页原型</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">📦 跟单进度跟踪 <span class="tag">本地原型 v0.2</span></div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="dash">驾驶舱</button>
+    <button class="tab" data-tab="raw">原始数据</button>
+    <button class="tab" data-tab="overdue">逾期呆滞</button>
+    <button class="tab" data-tab="redundancy">合同冗余</button>
+    <button class="tab" data-tab="products">产品资料</button>
+    <button class="tab" data-tab="shipping">发货需求</button>
+    <button class="tab" data-tab="forecast">销售预测</button>
+    <button class="tab" data-tab="order">订单明细</button>
+    <button class="tab" data-tab="proc">工序进度</button>
+    <button class="tab" data-tab="gantt">甘特</button>
+    <button class="tab" data-tab="contract">合同汇总</button>
+    <button class="tab" data-tab="shipchk">发货判断</button>
+    <button class="tab" data-tab="params">参数·字典</button>
+    <button class="tab" data-tab="backup">备份</button>
+  </nav>
+  <div id="userBox" class="user-box">
+    <span id="userName">本地用户</span>
+    <span id="userRole" class="role-badge">管理员</span>
+    <button id="logoutBtn" class="btn small" style="display:none">退出</button>
+  </div>
+</header>
+
+<main>
+  <!-- 驾驶舱 -->
+  <section id="dash" class="panel active">
+    <h2>驾驶舱 · 关键指标</h2>
+    <div id="kpiCards" class="kpi-grid"></div>
+    <div class="charts">
+      <div class="card"><h3>完成率</h3><canvas id="chartRate"></canvas></div>
+      <div class="card"><h3>各厂商在手金额 Top10</h3><canvas id="chartFactory"></canvas></div>
+      <div class="card"><h3>各运营组别逾期分布</h3><canvas id="chartGroup"></canvas></div>
+    </div>
+  </section>
+
+  <!-- 原始数据 -->
+  <section id="raw" class="panel">
+    <div class="toolbar">
+      <h2>原始数据表</h2>
+      <div class="spacer"></div>
+      <select id="rawOperator" class="filter"><option value="">跟单员(全部)</option></select>
+      <select id="rawGroup" class="filter"><option value="">运营组别(全部)</option></select>
+      <select id="rawFactory" class="filter"><option value="">厂商(全部)</option></select>
+      <input id="rawSearch" placeholder="搜索合同号/产品/团队/运营/厂商">
+      <button id="rawSearchBtn" class="btn">搜索</button>
+      <button id="rawExcelBtn" class="btn">从Excel导入</button>
+      <button id="rawBulkBtn" class="btn">批量粘贴导入</button>
+      <label class="sel-all" data-need="admin"><input type="checkbox" id="rawSelAll"> 全选所有匹配项（<span id="rawTotal">0</span> 条）</label>
+      <button id="rawDelBtn" class="btn danger" data-need="admin">批量删除</button>
+      <button id="rawAddBtn" class="btn primary">+ 新增一行</button>
+      <input type="file" id="rawExcelFile" accept=".xlsx" style="display:none">
+    </div>
+    <div id="rawTableWrap" class="table-wrap"></div>
+    <div id="rawPager" class="pager"></div>
+  </section>
+
+  <!-- 逾期呆滞 -->
+  <section id="overdue" class="panel">
+    <div class="toolbar">
+      <h2>逾期呆滞</h2>
+      <div class="spacer"></div>
+      <label>基准日 <input id="ovBase" type="date"></label>
+      <select id="ovGroup" class="filter"><option value="">运营组别(全部)</option></select>
+      <select id="ovOperator" class="filter"><option value="">跟单员(全部)</option></select>
+      <select id="ovFactory" class="filter"><option value="">厂商(全部)</option></select>
+      <select id="ovBucket" class="filter">
+        <option value="">逾期档(全部)</option>
+        <option value="0-30">0-30 天</option>
+        <option value="31-90">31-90 天</option>
+        <option value="91-180">91-180 天</option>
+        <option value="181-365">181-365 天</option>
+        <option value="365+">365 天以上</option>
+      </select>
+    </div>
+    <div id="ovSummary" class="kpi-grid"></div>
+    <div class="charts">
+      <div class="card"><h3>逾期分档(行数)</h3><canvas id="chartOvBucket"></canvas></div>
+      <div class="card"><h3>逾期分档(金额)</h3><canvas id="chartOvAmt"></canvas></div>
+    </div>
+    <div id="ovTableWrap" class="table-wrap"></div>
+    <div id="ovPager" class="pager"></div>
+  </section>
+
+  <!-- 合同冗余 -->
+  <section id="redundancy" class="panel">
+    <div class="toolbar">
+      <h2>合同冗余判定</h2>
+      <div class="spacer"></div>
+      <label>基准日 <input id="rdBase" type="date"></label>
+    </div>
+    <div id="rdSummary" class="kpi-grid"></div>
+    <div class="charts">
+      <div class="card"><h3>交付周期分档(金额)</h3><canvas id="chartCyc"></canvas></div>
+    </div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" data-sub="by_group">按运营组别</button>
+      <button class="sub-tab" data-sub="by_factory">按厂商</button>
+      <button class="sub-tab" data-sub="by_product">按产品编号(公司级)</button>
+      <button class="sub-tab" data-sub="by_sku_operator">SKU×运营专员</button>
+    </div>
+    <div id="rdTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 产品资料 -->
+  <section id="products" class="panel">
+    <div class="toolbar">
+      <h2>产品资料表</h2>
+      <div class="spacer"></div>
+      <button id="prodTplBtn" class="btn">下载模板</button>
+      <button id="prodImportBtn" class="btn">从Excel导入</button>
+      <button id="prodAddBtn" class="btn primary">+ 新增</button>
+      <input type="file" id="prodExcelFile" accept=".xlsx" style="display:none">
+    </div>
+    <p class="hint small">模板列：产品编号*、中文品名、工艺品类、SPU（* 必填，表头可用中文自动识别；SPU 供工序进度模块按产品编号匹配）。</p>
+    <div id="prodTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 发货需求 -->
+  <section id="shipping" class="panel">
+    <div class="toolbar">
+      <h2>发货需求表</h2>
+      <div class="spacer"></div>
+      <button id="shipTplBtn" class="btn">下载模板</button>
+      <button id="shipImportBtn" class="btn">从Excel导入</button>
+      <button id="shipAddBtn" class="btn primary">+ 新增</button>
+      <input type="file" id="shipExcelFile" accept=".xlsx" style="display:none">
+    </div>
+    <p class="hint small">模板列：产品编号(SKU)*、团队*、运营专员、厂商、跟单员、发货数量*、发货时间(YYYY-MM-DD)*。</p>
+    <div id="shipTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 销售预测 -->
+  <section id="forecast" class="panel">
+    <div class="toolbar">
+      <h2>销售预测表</h2>
+      <div class="spacer"></div>
+      <button id="fcTplBtn" class="btn">下载模板</button>
+      <button id="fcImportBtn" class="btn">从Excel导入</button>
+      <button id="fcAddBtn" class="btn primary">+ 新增</button>
+      <input type="file" id="fcExcelFile" accept=".xlsx" style="display:none">
+    </div>
+    <p class="hint small">模板列：产品编号*、运营专员*、未来3月预计出货数量*。</p>
+    <div id="fcTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 订单明细 02 -->
+  <section id="order" class="panel">
+    <div class="toolbar">
+      <h2>订单明细（02）</h2>
+      <div class="spacer"></div>
+      <select id="odOperator" class="filter"><option value="">跟单员(全部)</option></select>
+      <select id="odGroup" class="filter"><option value="">运营组别(全部)</option></select>
+      <select id="odFactory" class="filter"><option value="">厂商(全部)</option></select>
+      <input id="odSearch" placeholder="搜索合同号/产品/团队/运营/厂商">
+      <button id="odSearchBtn" class="btn">搜索</button>
+    </div>
+    <div id="odSummary" class="kpi-grid"></div>
+    <div id="odTableWrap" class="table-wrap"></div>
+    <div id="odPager" class="pager"></div>
+  </section>
+
+  <!-- 工序进度 03 -->
+  <section id="proc" class="panel">
+    <div class="toolbar">
+      <h2>工序进度（03）· 独立数据源</h2>
+      <div class="spacer"></div>
+      <input id="pcSearch" placeholder="搜索合同号/产品/SPU">
+      <button id="pcSearchBtn" class="btn">搜索</button>
+      <button id="pcTplBtn" class="btn">下载模板</button>
+      <button id="pcImportBtn" class="btn">从Excel导入</button>
+      <button id="pcBatchBtn" class="btn primary" data-need="writer">批量更新工序进度</button>
+      <span id="pcSelCount" class="hint small">已选 0 行</span>
+      <input type="file" id="pcExcelFile" accept=".xlsx" style="display:none">
+    </div>
+    <p class="hint small">本模块数据<strong>独立维护</strong>：从 Excel 导入<strong>明细</strong>，页面按「产品编号 + 合同号」自动汇总；更新原始数据表不会影响此处工序进度。点击工序色块录入实际完成；勾选多行可批量更新；每行末「明细」查看导入的明细行。</p>
+    <div class="filter-row">
+      <span class="filter-row-title">列名筛选：</span>
+      <label>合同号 <input id="pcFContract" class="finput"></label>
+      <label>产品编号 <input id="pcFProduct" class="finput"></label>
+      <label>SPU <input id="pcFSp" class="finput"></label>
+      <label>工艺品类 <input id="pcFCat" class="finput"></label>
+      <label>检验重点 <input id="pcFInsp" class="finput"></label>
+      <button id="pcFilterBtn" class="btn small">筛选</button>
+      <button id="pcFilterReset" class="btn small">重置</button>
+    </div>
+    <div id="pcTableWrap" class="table-wrap proc-table"></div>
+    <div id="pcPager" class="pager"></div>
+  </section>
+
+  <!-- 甘特 04 -->
+  <section id="gantt" class="panel">
+    <div class="toolbar">
+      <h2>甘特图（04）· 22 周滚动</h2>
+      <div class="spacer"></div>
+      <select id="gtOperator" class="filter"><option value="">跟单员(全部)</option></select>
+      <select id="gtGroup" class="filter"><option value="">运营组别(全部)</option></select>
+      <select id="gtFactory" class="filter"><option value="">厂商(全部)</option></select>
+      <input id="gtSearch" placeholder="搜索合同号/产品/团队/运营/厂商">
+      <button id="gtSearchBtn" class="btn">搜索</button>
+      <label>基准日 <input id="gtBase" type="date"></label>
+    </div>
+    <div id="gtSummary" class="kpi-grid"></div>
+    <div id="gtTableWrap" class="table-wrap"></div>
+    <div id="gtPager" class="pager"></div>
+  </section>
+
+  <!-- 合同汇总 06 -->
+  <section id="contract" class="panel">
+    <div class="toolbar">
+      <h2>合同汇总（06）</h2>
+      <div class="spacer"></div>
+      <label>基准日 <input id="ctBase" type="date"></label>
+    </div>
+    <div id="ctSummary" class="kpi-grid"></div>
+    <div id="ctTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 发货需求判断 10 -->
+  <section id="shipchk" class="panel">
+    <div class="toolbar">
+      <h2>发货需求判断（10）</h2>
+      <div class="spacer"></div>
+      <label>开始日 <input id="scStart" type="date"></label>
+      <label>结束日 <input id="scEnd" type="date"></label>
+      <button id="scBtn" class="btn">计算</button>
+    </div>
+    <div id="scSummary" class="kpi-grid"></div>
+    <div id="scTableWrap" class="table-wrap"></div>
+  </section>
+
+  <!-- 参数·字典·标准 07/08/09 -->
+  <section id="params" class="panel">
+    <h2>参数 · 字典 · 标准</h2>
+    <h3>① 工序节拍（07）— 计划开工 = 合同日 + a，计划完工 = 出货日 + b</h3>
+    <div id="pmTactWrap" class="table-wrap"></div>
+    <h3>② 阈值与字典（08）</h3>
+    <div id="pmDictWrap" class="kpi-grid"></div>
+    <h3>③ 检验标准（09）— 产中检验参考</h3>
+    <div id="pmQcWrap" class="qc-ref"></div>
+  </section>
+
+  <!-- 备份 -->
+  <section id="backup" class="panel">
+    <h2>数据备份</h2>
+    <p class="hint">数据存于本地 SQLite 文件 <code>tracker.db</code>。点下方按钮可立即备份一份带时间戳的副本到 <code>backups/</code> 目录（自动保留最近 30 份）。建议再配置 Windows 计划任务每日自动备份，并同步到云盘以防单机损坏。</p>
+    <button id="backupBtn" class="btn primary">立即备份</button>
+    <div id="backupMsg" class="hint"></div>
+  </section>
+</main>
+
+<!-- 通用编辑弹窗 -->
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head"><span id="modalTitle">编辑</span><button id="modalClose" class="x">×</button></div>
+    <div id="modalBody" class="modal-body"></div>
+    <div id="modalErr" class="err"></div>
+    <div class="modal-foot">
+      <button id="modalSave" class="btn primary">保存</button>
+      <button id="modalCancel" class="btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 工序批量更新弹窗（跟单员/管理员） -->
+<div id="pcBulkModal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head"><span>批量更新工序进度</span><button id="pcBulkClose" class="x">×</button></div>
+    <div id="pcBulkModalBody" class="modal-body"></div>
+    <div id="pcBulkModalErr" class="err"></div>
+    <div class="modal-foot">
+      <button id="pcBulkModalSave" class="btn primary">确认批量更新</button>
+      <button id="pcBulkCancel" class="btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 工序进度明细弹窗 -->
+<div id="pcDetailModal" class="modal hidden">
+  <div class="modal-box wide">
+    <div class="modal-head"><span id="pcDetailTitle">导入明细</span><button id="pcDetailClose" class="x">×</button></div>
+    <div id="pcDetailBody" class="modal-body" style="display:block"></div>
+    <div class="modal-foot">
+      <button id="pcDetailClose2" class="btn">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批量粘贴导入弹窗 -->
+<div id="bulkModal" class="modal hidden">
+  <div class="modal-box wide">
+    <div class="modal-head"><span>批量粘贴导入（原始数据）</span><button id="bulkClose" class="x">×</button></div>
+    <p class="hint">从 Excel 选中多行（含表头）复制，粘贴到下方文本框。表头需包含：合同号、产品编号、订单总数量、未到货总数量、采购单价、交货日期 等（列顺序随意，按中文表头自动匹配）。每行一个合同。</p>
+    <textarea id="bulkText" placeholder="在此粘贴（Tab 分隔，第一行为表头）..."></textarea>
+    <div id="bulkMsg" class="hint"></div>
+    <div class="modal-foot">
+      <button id="bulkParse" class="btn">解析预览</button>
+      <button id="bulkImport" class="btn primary">确认导入</button>
+      <button id="bulkCancel" class="btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js?v=20260819r2"></script>
+</body>
+</html>
