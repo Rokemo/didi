@@ -121,9 +121,10 @@ def push(repo, branch, token, message, sync):
         if kept:
             print(f"[additive] 保留 {kept} 个远程额外文件（本地未跟踪）")
 
-    # 3) 创建 tree（base_tree 复用远程 tree，提升效率）
+    # 3) 创建 tree（不使用 base_tree：显式给出完整文件清单，
+    #    远程中存在但此处未列出的文件才会被真正删除，保证 --sync 生效）
     st, new_tree = api("POST", f"/repos/{repo}/git/trees", token=token,
-                       data={"tree": list(tree_entries.values()), "base_tree": state["tree"]})
+                       data={"tree": list(tree_entries.values())})
     if st != 201:
         return f"tree 创建失败 {st}: {new_tree}"
     print(f"[tree] {new_tree['sha'][:10]} (共 {len(tree_entries)} 项)")
