@@ -1,21 +1,74 @@
 @echo off
+chcp 936 >nul 2>&1
+setlocal
 cd /d "%~dp0"
-echo ============================================================
-echo   è·Ÿå•ç½‘é¡µåŸå‹ - å¯åŠ¨å™¨
-echo   æµè§ˆå™¨æ‰“å¼€ï¼š http://127.0.0.1:8731
-echo   å…³é—­æœ¬çª—å£ = åœæ­¢æœåŠ¡ = ç½‘é¡µæ‰“ä¸å¼€
-echo   å¯åŠ¨æ—¥å¿—å†™å…¥åŒç›®å½• server.log
-echo ============================================================
+set "PORT=8731"
 
-REM å…ˆé‡Šæ”¾ 8731 ç«¯å£ä¸Šå¯èƒ½æ®‹ç•™çš„æ—§è¿›ç¨‹
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8731 ^| findstr LISTENING') do (
-  echo å‘ç°å ç”¨ 8731 çš„æ—§è¿›ç¨‹ PID=%%aï¼Œæ­£åœ¨ç»“æŸ...
+REM ===== 1. ÊÍ·Å¶Ë¿Ú²ĞÁô =====
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%PORT% ^| findstr LISTENING') do (
+  echo [ÊÍ·Å] ½áÊøÕ¼ÓÃ %PORT% µÄ¾É½ø³Ì PID=%%a
   taskkill /PID %%a /F >nul 2>&1
 )
-timeout /t 1 >nul
+timeout /t 1 /nobreak >nul 2>&1
 
-echo æ­£åœ¨å¯åŠ¨æœåŠ¡ï¼ˆæ–°åå°é€»è¾‘ï¼Œæ”¯æŒè·¨é¡µå…¨é€‰åˆ é™¤ï¼‰...
-"C:\Users\beiyou201\.workbuddy\binaries\python\envs\default\Scripts\python.exe" server.py > server.log 2>&1
+REM ===== 2. ¶¨Î» Python£ºÖğ¸öºòÑ¡"Êµ²âÄÜÅÜ´úÂë"²ÅËãÊı =====
+REM     ±ÜÃâ±» Windows ÉÌµêµÄ¼Ù python Õ¼Î»·ûÆ­µ½
+set "PY="
+for /f "delims=" %%i in ('where python 2^>nul') do (
+  if not defined PY (
+    "%%i" -c "print(1)" >nul 2>&1
+    if not errorlevel 1 set PY="%%i"
+  )
+)
+if defined PY goto :havepy
+
+for /f "delims=" %%i in ('where py 2^>nul') do (
+  if not defined PY (
+    "%%i" -3 -c "print(1)" >nul 2>&1
+    if not errorlevel 1 set "PY=%%i -3"
+  )
+)
+if defined PY goto :havepy
+
+if exist "C:\Users\beiyou201\.workbuddy\binaries\python\envs\default\Scripts\python.exe" set "PY=C:\Users\beiyou201\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
+if defined PY goto :havepy
+
 echo.
-echo æœåŠ¡å·²åœæ­¢ã€‚è¯¦è§åŒç›®å½• server.log
+echo [´íÎó] Ã»ÓĞÕÒµ½¿ÉÓÃµÄ Python£¡
+echo ÏÂÔØ°²×°£ºhttps://www.python.org/downloads/
+echo °²×°Ê±Îñ±Ø¹´Ñ¡ "Add python.exe to PATH"£¬×°ÍêºóÖØĞÂË«»÷±¾ÎÄ¼ş¡£
+echo.
 pause
+exit /b 1
+
+:havepy
+echo [Python] %PY%
+
+REM ===== 3. È·±£ openpyxl£¨Excel µ¼ÈëĞèÒª£©=====
+%PY% -c "import openpyxl" >nul 2>&1
+if errorlevel 1 (
+  echo [°²×°] È±ÉÙ openpyxl£¬ÕıÔÚ×Ô¶¯°²×°£¨Ê×´ÎĞèÒªÍøÂç£©...
+  %PY% -m pip install openpyxl
+  if errorlevel 1 (
+    echo.
+    echo [´íÎó] openpyxl °²×°Ê§°Ü¡£Çë¼ì²éÍøÂçºóÖØÊÔ£¬»òÊÖ¶¯Ö´ĞĞ£º
+    echo        %PY% -m pip install openpyxl
+    echo.
+    pause
+    exit /b 1
+  )
+)
+
+echo ============================================================
+echo   ¸úµ¥½ø¶È¸ú×Ù - ±¾µØ·şÎñ
+echo   ±¾»ú´ò¿ª£º http://127.0.0.1:%PORT%
+echo   ¹Ø±Õ±¾´°¿Ú = Í£Ö¹·şÎñ
+echo   ÈôÏÂ·½Á¢¼´±¨´í£¬´°¿Ú»á±£³Ö´ò¿ª£¬Çë½ØÍ¼±¨´íÄÚÈİ
+echo ============================================================
+timeout /t 2 /nobreak >nul 2>&1
+start "" http://127.0.0.1:%PORT%
+%PY% server.py
+echo.
+echo [ÌáÊ¾] ·şÎñÒÑÍ£Ö¹£¨exit code=%errorlevel%£©¡£ÈôÒ³Ãæ´ò²»¿ª£¬Çë½ØÍ¼ÉÏ·½±¨´í¡£
+pause
+endlocal

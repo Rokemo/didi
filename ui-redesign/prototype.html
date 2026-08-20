@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跟单进度跟踪 · 改版原型（清爽浅色）</title>
+<style>
+:root{
+  --bg:#F6F8FB; --surface:#FFFFFF; --surface-2:#F1F4F9; --border:#E8ECF2;
+  --text-1:#1E2533; --text-2:#6B7488; --text-3:#9AA3B2;
+  --primary:#3B6FF5; --primary-50:#EEF3FF; --primary-100:#DCE7FF; --primary-600:#2F5BE0; --primary-700:#2547B8;
+  --success:#16A34A; --success-soft:#E7F6EC;
+  --warning:#F59E0B; --warning-soft:#FEF3E2;
+  --danger:#EF4444; --danger-soft:#FDECEC;
+  --st-none:#C2C9D6; --st-doing:#3B6FF5; --st-done:#16A34A; --st-warn:#F59E0B; --st-over:#EF4444;
+  --r-sm:6px; --r:10px; --r-lg:14px; --r-pill:999px;
+  --sh-sm:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  --sh-md:0 6px 16px rgba(16,24,40,.08);
+  --tr:160ms cubic-bezier(.4,0,.2,1);
+  --font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text-1);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+::-webkit-scrollbar{height:10px;width:10px}
+::-webkit-scrollbar-thumb{background:#D5DCE6;border-radius:999px}
+
+/* layout */
+.app{display:flex;min-height:100vh}
+.sidebar{width:240px;flex:0 0 240px;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:18px 18px;font-weight:600;font-size:15px;
+  border-bottom:1px solid var(--border)}
+.brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#6C8FFF);
+  display:grid;place-items:center;color:#fff;font-size:16px}
+.nav{flex:1;overflow-y:auto;padding:10px 10px 20px}
+.nav-group{margin-top:14px}
+.nav-group:first-child{margin-top:4px}
+.nav-group-title{font-size:11px;letter-spacing:.06em;color:var(--text-3);text-transform:uppercase;
+  padding:6px 12px;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;margin:2px 0;border-radius:var(--r-sm);
+  color:var(--text-2);font-size:13.5px;border:none;background:none;width:100%;text-align:left;position:relative;transition:var(--tr)}
+.nav-item .ico{width:18px;text-align:center;opacity:.85}
+.nav-item:hover{background:var(--surface-2);color:var(--text-1)}
+.nav-item.active{background:var(--primary-50);color:var(--primary-700);font-weight:500}
+.nav-item.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:3px;background:var(--primary)}
+.side-foot{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:8px}
+.side-foot .dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:60px;flex:0 0 60px;background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:16px;padding:0 24px;position:sticky;top:0;z-index:20}
+.topbar .page-title{font-size:17px;font-weight:600;display:flex;align-items:center;gap:10px}
+.topbar .crumb{color:var(--text-3);font-weight:400;font-size:13px}
+.search{flex:1;max-width:420px;position:relative}
+.search input{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--r);padding:0 12px 0 34px;
+  background:var(--surface-2);font-size:13.5px;color:var(--text-1);transition:var(--tr)}
+.search input:focus{outline:none;border-color:var(--primary);background:#fff;box-shadow:0 0 0 3px rgba(59,111,245,.12)}
+.search .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-3)}
+.top-actions{display:flex;align-items:center;gap:10px;margin-left:auto}
+.user-chip{display:flex;align-items:center;gap:9px;padding:5px 8px 5px 12px;border:1px solid var(--border);
+  border-radius:var(--r-pill);background:var(--surface)}
+.user-chip .av{width:28px;height:28px;border-radius:50%;background:var(--primary-100);color:var(--primary-700);
+  display:grid;place-items:center;font-weight:600;font-size:13px}
+.user-chip .nm{font-size:13px;font-weight:500}
+.user-chip .rl{font-size:11px;color:var(--text-3)}
+.hamburger{display:none;border:none;background:none;font-size:20px;color:var(--text-2)}
+
+.content{padding:24px;max-width:1340px;width:100%;margin:0 auto}
+.panel{display:none;animation:fade .22s ease}
+.panel.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.block-title{font-size:18px;font-weight:600;margin-bottom:4px}
+.block-sub{color:var(--text-2);font-size:13px;margin-bottom:18px}
+
+/* kpi */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;box-shadow:var(--sh-sm)}
+.kpi .lab{color:var(--text-2);font-size:13px;display:flex;align-items:center;gap:6px}
+.kpi .val{font-size:28px;font-weight:600;margin-top:8px;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:14px;font-weight:500;color:var(--text-2);margin-left:2px}
+.kpi .trend{font-size:12px;margin-top:6px;display:flex;align-items:center;gap:4px}
+.trend.up{color:var(--success)} .trend.down{color:var(--danger)} .trend.flat{color:var(--text-3)}
+.kpi .ic{margin-left:auto;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:16px}
+.ic.blue{background:var(--primary-50);color:var(--primary)}
+.ic.green{background:var(--success-soft);color:var(--success)}
+.ic.amber{background:var(--warning-soft);color:var(--warning)}
+.ic.red{background:var(--danger-soft);color:var(--danger)}
+
+/* charts */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;box-shadow:var(--sh-sm)}
+.card h3{font-size:14px;font-weight:600;margin-bottom:14px}
+.chart-wrap{display:flex;align-items:center;gap:18px}
+.legend{display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:var(--text-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:middle}
+.bar-row{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:12.5px}
+.bar-row .name{width:96px;color:var(--text-2);text-align:right;flex:0 0 96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;background:var(--surface-2);border-radius:var(--r-pill);height:18px;overflow:hidden}
+.bar-fill{height:100%;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--primary),#6C8FFF);transition:width .6s}
+.bar-row .num{width:64px;flex:0 0 64px;font-variant-numeric:tabular-nums;color:var(--text-1)}
+
+/* toolbar / filter */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.toolbar h2{font-size:17px;font-weight:600;margin-right:auto}
+.filter-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px}
+.filter-row .fr-t{font-size:13px;color:var(--text-2);font-weight:500;margin-right:4px}
+.filter-row label{font-size:12.5px;color:var(--text-2);display:flex;align-items:center;gap:6px}
+.finput,.filter,.toolbar input,.toolbar select{height:36px;border:1px solid var(--border);border-radius:var(--r);
+  padding:0 12px;font-size:13px;color:var(--text-1);background:var(--surface);transition:var(--tr)}
+.finput:focus,.filter:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(59,111,245,.12)}
+select.filter{cursor:pointer}
+.btn{height:36px;padding:0 14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);
+  color:var(--text-1);font-size:13px;font-weight:500;transition:var(--tr);display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:#D2D9E4;background:var(--surface-2)}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-600);border-color:var(--primary-600)}
+.btn-danger{color:var(--danger);border-color:#F3C9C9}
+.btn-danger:hover{background:var(--danger-soft)}
+.btn-ghost{background:none;border-color:transparent;color:var(--text-2)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-sm{height:30px;padding:0 10px;font-size:12.5px}
+.hint{color:var(--text-2);font-size:12.5px}
+.hint.small{font-size:12px;margin-bottom:12px}
+.spacer{flex:1}
+
+/* table */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:auto;box-shadow:var(--sh-sm)}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+thead th{position:sticky;top:0;background:var(--surface-2);color:var(--text-2);font-weight:500;text-align:left;
+  padding:12px 14px;white-space:nowrap;border-bottom:1px solid var(--border);font-size:12.5px;z-index:2}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--border);color:var(--text-1);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono);font-size:12.5px}
+.row-check{width:34px;text-align:center}
+.row-check input{width:16px;height:16px;accent-color:var(--primary)}
+.link{color:var(--primary);cursor:pointer;font-weight:500}
+.link:hover{text-decoration:underline}
+
+/* pill */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:var(--r-pill);font-size:12px;font-weight:500;white-space:nowrap}
+.pill.neutral{background:var(--surface-2);color:var(--text-2)}
+.pill.success{background:var(--success-soft);color:var(--success)}
+.pill.warning{background:var(--warning-soft);color:var(--warning)}
+.pill.danger{background:var(--danger-soft);color:var(--danger)}
+.pill.info{background:var(--primary-50);color:var(--primary-700)}
+.pill .d{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+/* proc matrix */
+.proc-table{min-width:1180px}
+.stage-cell{width:26px;height:26px;border-radius:7px;display:inline-block;cursor:pointer;transition:var(--tr);
+  border:1px solid rgba(0,0,0,.04);vertical-align:middle}
+.stage-cell:hover{transform:scale(1.12);box-shadow:var(--sh-md)}
+.stage-cell.none{background:var(--st-none)}
+.stage-cell.doing{background:var(--st-doing)}
+.stage-cell.done{background:var(--st-done)}
+.stage-cell.warn{background:var(--st-warn)}
+.stage-cell.over{background:var(--st-over)}
+.stage-head{text-align:center!important;font-size:11px!important;color:var(--text-3)!important}
+.prog{height:7px;background:var(--surface-2);border-radius:var(--r-pill);overflow:hidden;width:90px}
+.prog>span{display:block;height:100%;background:linear-gradient(90deg,var(--success),#34D399);border-radius:var(--r-pill)}
+.prog-txt{font-size:12px;color:var(--text-2);margin-left:6px}
+
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(16,24,40,.45);backdrop-filter:blur(2px);display:none;
+  align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal.show{display:flex;animation:fade .18s ease}
+.modal-box{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--sh-md);width:520px;max-width:100%;
+  max-height:88vh;display:flex;flex-direction:column;animation:pop .2s ease}
+.modal-box.wide{width:760px}
+@keyframes pop{from{transform:scale(.96);opacity:.6}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);
+  font-weight:600;font-size:15px}
+.modal-head .x{border:none;background:none;font-size:22px;color:var(--text-3);line-height:1;cursor:pointer}
+.modal-head .x:hover{color:var(--text-1)}
+.modal-body{padding:20px;overflow:auto}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;color:var(--text-2);margin-bottom:6px;font-weight:500}
+.field input,.field select,.field textarea{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--r);
+  padding:0 12px;font-size:13.5px;font-family:inherit;color:var(--text-1);transition:var(--tr)}
+.field textarea{height:auto;padding:10px 12px;resize:vertical;min-height:90px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(59,111,245,.12)}
+.err{color:var(--danger);font-size:12.5px;padding:0 20px 12px}
+.detail-table{width:100%;font-size:12.5px;min-width:0}
+.detail-table th{background:var(--surface-2);text-align:left;padding:9px 10px;color:var(--text-2);font-weight:500}
+.detail-table td{padding:9px 10px;border-bottom:1px solid var(--border)}
+
+/* toast */
+.toasts{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:10px;z-index:200}
+.toast{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:var(--r);
+  padding:12px 16px;box-shadow:var(--sh-md);font-size:13px;min-width:240px;animation:slidein .25s ease;display:flex;gap:10px;align-items:flex-start}
+.toast.success{border-left-color:var(--success)}
+.toast.danger{border-left-color:var(--danger)}
+.toast .ti{font-size:15px;margin-top:1px}
+@keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+/* pager */
+.pager{display:flex;align-items:center;justify-content:space-between;padding:14px 4px;font-size:13px;color:var(--text-2)}
+.pager .pg{display:flex;gap:6px}
+.pager .pg button{min-width:32px;height:32px;border:1px solid var(--border);background:var(--surface);border-radius:var(--r);
+  color:var(--text-1);font-size:13px;transition:var(--tr)}
+.pager .pg button.cur{background:var(--primary);border-color:var(--primary);color:#fff}
+.pager .pg button:hover:not(.cur){background:var(--surface-2)}
+
+/* backup */
+.backup-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px;max-width:620px;box-shadow:var(--sh-sm)}
+.backup-box p{color:var(--text-2);margin-bottom:16px;line-height:1.7}
+.backup-box code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-family:var(--font-mono);font-size:12px}
+
+/* responsive */
+@media(max-width:1023px){
+  .sidebar{position:fixed;left:0;top:0;z-index:60;transform:translateX(-100%);transition:transform .25s}
+  .sidebar.open{transform:none;box-shadow:var(--sh-md)}
+  .hamburger{display:block}
+  .scrim{position:fixed;inset:0;background:rgba(16,24,40,.4);z-index:55;display:none}
+  .scrim.show{display:block}
+}
+@media(max-width:640px){
+  .content{padding:16px}
+  .search{display:none}
+  .kpi-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="logo">📦</span> 跟单进度跟踪</div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot"><span class="dot"></span> 本地服务 · 运行中</div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger">☰</button>
+      <div class="page-title"><span id="pageTitle">驾驶舱</span>
+        <span class="crumb" id="pageCrumb"></span></div>
+      <div class="search"><span class="si">🔍</span><input id="globalSearch" placeholder="全局搜索：合同号 / 产品 / 厂商 / 运营…"></div>
+      <div class="top-actions">
+        <div class="user-chip"><span class="av">本</span>
+          <div><div class="nm">本地用户</div><div class="rl">管理员</div></div></div>
+      </div>
+    </header>
+
+    <div class="content" id="content"><!-- panels injected by JS --></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- Generic modal -->
+<div class="modal" id="modal"><div class="modal-box">
+  <div class="modal-head"><span id="modalTitle">编辑</span><button class="x" data-close>×</button></div>
+  <div class="modal-body" id="modalBody"></div>
+  <div class="err" id="modalErr"></div>
+  <div class="modal-foot"><button class="btn btn-primary" id="modalSave">保存</button>
+    <button class="btn btn-ghost" data-close>取消</button></div>
+</div></div>
+
+<!-- Stage edit modal -->
+<div class="modal" id="stageModal"><div class="modal-box">
+  <div class="modal-head"><span id="stageTitle">录入工序</span><button class="x" data-close>×</button></div>
+  <div class="modal-body" id="stageBody"></div>
+  <div class="modal-foot"><button class="btn btn-primary" id="stageSave">保存</button>
+    <button class="btn btn-ghost" data-close>取消</button></div>
+</div></div>
+
+<!-- Batch modal -->
+<div class="modal" id="batchModal"><div class="modal-box">
+  <div class="modal-head"><span>批量更新工序进度</span><button class="x" data-close>×</button></div>
+  <div class="modal-body" id="batchBody"></div>
+  <div class="modal-foot"><button class="btn btn-primary" id="batchSave">确认批量更新</button>
+    <button class="btn btn-ghost" data-close>取消</button></div>
+</div></div>
+
+<!-- Detail modal -->
+<div class="modal" id="detailModal"><div class="modal-box wide">
+  <div class="modal-head"><span id="detailTitle">导入明细</span><button class="x" data-close>×</button></div>
+  <div class="modal-body" id="detailBody"></div>
+  <div class="modal-foot"><button class="btn btn-ghost" data-close>关闭</button></div>
+</div></div>
+
+<script>
+/* ============ Data ============ */
+const NAV=[
+  {group:"概览",items:[{id:"dash",name:"驾驶舱",ico:"🏠"}]},
+  {group:"生产进度",items:[
+    {id:"proc",name:"工序进度",ico:"🧩"},
+    {id:"gantt",name:"甘特图",ico:"📊"},
+    {id:"overdue",name:"逾期呆滞",ico:"⏰"}]},
+  {group:"订单与合同",items:[
+    {id:"raw",name:"原始数据",ico:"📋"},
+    {id:"order",name:"订单明细",ico:"📑"},
+    {id:"contract",name:"合同汇总",ico:"📁"},
+    {id:"redundancy",name:"合同冗余",ico:"🔁"}]},
+  {group:"资料库",items:[
+    {id:"products",name:"产品资料",ico:"🏷️"},
+    {id:"shipping",name:"发货需求",ico:"🚚"},
+    {id:"forecast",name:"销售预测",ico:"📈"}]},
+  {group:"分析",items:[{id:"shipchk",name:"发货需求判断",ico:"✅"}]},
+  {group:"系统",items:[{id:"params",name:"参数·字典",ico:"⚙️"},{id:"backup",name:"数据备份",ico:"💾"}]}
+];
+const CRUMB={dash:"跟踪总览",proc:"生产进度",gantt:"生产进度",overdue:"生产进度",raw:"订单与合同",
+  order:"订单与合同",contract:"订单与合同",redundancy:"订单与合同",products:"资料库",shipping:"资料库",
+  forecast:"资料库",shipchk:"分析",params:"系统",backup:"系统"};
+
+const KPIS=[
+  {lab:"在手待交付",val:"27,569",unit:"件",trend:"↑ 3.2% 周环比",cls:"up",ic:"📦",bg:"blue"},
+  {lab:"在手待交付金额",val:"1548.6",unit:"万元",trend:"↑ 1.8%",cls:"up",ic:"💰",bg:"blue"},
+  {lab:"逾期合同",val:"23",unit:"个",trend:"↓ 5 较上周",cls:"down",ic:"⏰",bg:"red"},
+  {lab:"逾期金额",val:"86.4",unit:"万元",trend:"↑ 12.1%",cls:"down",ic:"⚠️",bg:"amber"},
+  {lab:"本周应出货",val:"1,842",unit:"件",trend:"平稳",cls:"flat",ic:"🚀",bg:"green"},
+  {lab:"工序完成率",val:"68.5",unit:"%",trend:"↑ 4.0%",cls:"up",ic:"✅",bg:"green"}
+];
+
+const STAGES=["来料检查","下料后","金加工","半成品","预组装","喷塑","入箱前"];
+const STG_KEY={0:"none",1:"doing",2:"done",3:"warn",4:"over"};
+const PROC_ROWS=[
+  {pk:"PO-A·SKU-001",contract:"PO-A",sku:"SKU-001",spu:"SPU-X12",qty:150,cd:"2026-06-10",sd:"2026-09-01",cat:"五金工具",
+   cur:"喷塑",prog:71,complaint:"把手易松动",focus:"喷塑环节",it:"2026-08-20",ir:"待验",
+   st:[2,2,2,2,1,1,0],detail:[{po:"PO-A-01",qty:80,cd:"2026-06-10",sd:"2026-09-01"},{po:"PO-A-02",qty:70,cd:"2026-06-12",sd:"2026-09-03"}]},
+  {pk:"PO-A·SKU-002",contract:"PO-A",sku:"SKU-002",spu:"SPU-X12",qty:30,cd:"2026-06-15",sd:"2026-09-05",cat:"五金工具",
+   cur:"金加工",prog:43,complaint:"",focus:"金加工阶段",it:"",ir:"",
+   st:[2,2,1,0,0,0,0],detail:[{po:"PO-A-03",qty:30,cd:"2026-06-15",sd:"2026-09-05"}]},
+  {pk:"PO-B·SKU-001",contract:"PO-B",sku:"SKU-001",spu:"SPU-Y07",qty:20,cd:"2026-05-20",sd:"2026-08-15",cat:"塑料件",
+   cur:"入箱前",prog:86,complaint:"色差投诉",focus:"入箱前",it:"2026-08-12",ir:"合格",
+   st:[2,2,2,2,2,2,1],detail:[{po:"PO-B-01",qty:20,cd:"2026-05-20",sd:"2026-08-15"}]},
+  {pk:"PO-C·SKU-009",contract:"PO-C",sku:"SKU-009",spu:"SPU-Z33",qty:64,cd:"2026-04-30",sd:"2026-08-10",cat:"电子配件",
+   cur:"喷塑",prog:58,complaint:"",focus:"打磨/喷塑检验",it:"",ir:"逾期",
+   st:[2,2,2,1,4,4,0],detail:[{po:"PO-C-01",qty:34,cd:"2026-04-30",sd:"2026-08-10"},{po:"PO-C-02",qty:30,cd:"2026-05-02",sd:"2026-08-12"}]},
+  {pk:"PO-D·SKU-004",contract:"PO-D",sku:"SKU-004",spu:"SPU-X12",qty:120,cd:"2026-06-01",sd:"2026-09-10",cat:"五金工具",
+   cur:"预组装",prog:62,complaint:"螺丝缺失",focus:"预组装阶段",it:"",ir:"",
+   st:[2,2,2,2,1,0,0],detail:[{po:"PO-D-01",qty:60,cd:"2026-06-01",sd:"2026-09-10"},{po:"PO-D-02",qty:60,cd:"2026-06-03",sd:"2026-09-12"}]},
+  {pk:"PO-E·SKU-011",contract:"PO-E",sku:"SKU-011",spu:"SPU-Y07",qty:45,cd:"2026-07-01",sd:"2026-09-20",cat:"塑料件",
+   cur:"半成品",prog:38,complaint:"",focus:"半成品成型",it:"",ir:"",
+   st:[2,2,1,1,0,0,0],detail:[{po:"PO-E-01",qty:45,cd:"2026-07-01",sd:"2026-09-20"}]},
+  {pk:"PO-F·SKU-002",contract:"PO-F",sku:"SKU-002",spu:"SPU-Z33",qty:88,cd:"2026-03-15",sd:"2026-07-30",cat:"电子配件",
+   cur:"入箱前",prog:93,complaint:"",focus:"入箱前",it:"2026-07-28",ir:"合格",
+   st:[2,2,2,2,2,2,1],detail:[{po:"PO-F-01",qty:88,cd:"2026-03-15",sd:"2026-07-30"}]},
+  {pk:"PO-G·SKU-007",contract:"PO-G",sku:"SKU-007",spu:"SPU-X12",qty:210,cd:"2026-06-20",sd:"2026-09-25",cat:"五金工具",
+   cur:"金加工",prog:33,complaint:"",focus:"金加工阶段",it:"",ir:"",
+   st:[2,2,1,0,0,0,0],detail:[{po:"PO-G-01",qty:110,cd:"2026-06-20",sd:"2026-09-25"},{po:"PO-G-02",qty:100,cd:"2026-06-22",sd:"2026-09-28"}]}
+];
+
+const FACTORY_TOP=[["厂商A",328],["厂商B",276],["厂商C",241],["厂商D",198],["厂商E",167],["厂商F",142],["厂商G",121],["厂商H",98],["厂商I",76],["厂商J",54]];
+const OV_BUCKETS=[["0-30天",38],["31-90天",52],["91-180天",29],["181-365天",14],["365天+",6]];
+
+const SAMPLE_TABLES={
+  raw:[
+    {c:"PO-2026-0001",sku:"SKU-001",team:"组别一",op:"张三",fac:"厂商A",qty:150,aq:90,price:42.5,dd:"2026-09-01",st:"进行中"},
+    {c:"PO-2026-0002",sku:"SKU-002",team:"组别二",op:"李四",fac:"厂商B",qty:30,aq:30,price:18.0,dd:"2026-09-05",st:"未开始"},
+    {c:"PO-2026-0003",sku:"SKU-009",team:"组别一",op:"王五",fac:"厂商C",qty:64,aq:64,price:75.0,dd:"2026-08-10",st:"逾期"},
+    {c:"PO-2026-0004",sku:"SKU-004",team:"组别三",op:"张三",fac:"厂商A",qty:120,aq:60,price:53.0,dd:"2026-09-10",st:"进行中"},
+    {c:"PO-2026-0005",sku:"SKU-011",team:"组别二",op:"李四",fac:"厂商B",qty:45,aq:45,price:22.5,dd:"2026-09-20",st:"未开始"}
+  ],
+  order:[
+    {c:"PO-2026-0001",sku:"SKU-001",team:"组别一",op:"张三",fac:"厂商A",contract:"1",total:150,undeliv:90,amt:6375,dd:"2026-09-01"},
+    {c:"PO-2026-0004",sku:"SKU-004",team:"组别三",op:"张三",fac:"厂商A",contract:"1",total:120,undeliv:60,amt:6360,dd:"2026-09-10"},
+    {c:"PO-2026-0003",sku:"SKU-009",team:"组别一",op:"王五",fac:"厂商C",contract:"1",total:64,undeliv:64,amt:4800,dd:"2026-08-10"}
+  ],
+  contract:[
+    {c:"PO-2026-0001",sku:"SKU-001",fac:"厂商A",op:"张三",total:150,amt:6375,undeliv:90,deadline:"2026-09-01",st:"进行中"},
+    {c:"PO-2026-0003",sku:"SKU-009",fac:"厂商C",op:"王五",total:64,amt:4800,undeliv:64,deadline:"2026-08-10",st:"逾期"},
+    {c:"PO-2026-0004",sku:"SKU-004",fac:"厂商A",op:"张三",total:120,amt:6360,undeliv:60,deadline:"2026-09-10",st:"进行中"}
+  ],
+  redundancy:[
+    {key:"组别一",amt:11180,over:2,note:"SKU-009 超期未到货，建议调拨"},
+    {key:"组别二",amt:4305,over:0,note:"正常"},
+    {key:"组别三",amt:6360,over:0,note:"正常"}
+  ],
+  products:[
+    {code:"SKU-001",name:"合金扳手组",cat:"五金工具",spu:"SPU-X12"},
+    {code:"SKU-002",name:"伸缩导轨",cat:"五金工具",spu:"SPU-X12"},
+    {code:"SKU-009",name:"Type-C 模块",cat:"电子配件",spu:"SPU-Z33"},
+    {code:"SKU-011",name:"收纳盒",cat:"塑料件",spu:"SPU-Y07"}
+  ],
+  shipping:[
+    {code:"SKU-001",team:"组别一",op:"张三",fac:"厂商A",qty:150,date:"2026-09-01"},
+    {code:"SKU-004",team:"组别三",op:"张三",fac:"厂商A",qty:120,date:"2026-09-10"},
+    {code:"SKU-009",team:"组别一",op:"王五",fac:"厂商C",qty:64,date:"2026-08-10"}
+  ],
+  forecast:[
+    {code:"SKU-001",op:"张三",q3:420,note:"旺季上行"},
+    {code:"SKU-009",op:"王五",q3:180,note:"稳定"},
+    {code:"SKU-011",op:"李四",q3:260,note:"新品爬坡"}
+  ],
+  gantt:[
+    {c:"PO-2026-0001",sku:"SKU-001",start:"2026-06-10",end:"2026-09-01",prog:71,st:"进行中"},
+    {c:"PO-2026-0003",sku:"SKU-009",start:"2026-04-30",end:"2026-08-10",prog:58,st:"逾期"},
+    {c:"PO-2026-0004",sku:"SKU-004",start:"2026-06-01",end:"2026-09-10",prog:62,st:"进行中"}
+  ],
+  shipchk:[
+    {code:"SKU-001",need:150,supply:90,gap:60,ok:"不足"},
+    {code:"SKU-009",need:64,supply:0,gap:64,ok:"不足"},
+    {code:"SKU-011",need:45,supply:45,gap:0,ok:"满足"}
+  ]
+};
+
+/* ============ Render ============ */
+const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
+const content=$("#content");
+
+function buildNav(){
+  const nav=$("#nav");nav.innerHTML="";
+  NAV.forEach(g=>{
+    const gt=document.createElement("div");gt.className="nav-group";
+    gt.innerHTML=`<div class="nav-group-title">${g.group}</div>`;
+    g.items.forEach(it=>{
+      const b=document.createElement("button");b.className="nav-item";b.dataset.id=it.id;
+      b.innerHTML=`<span class="ico">${it.ico}</span>${it.name}`;
+      b.onclick=()=>go(it.id);
+      gt.appendChild(b);
+    });
+    nav.appendChild(gt);
+  });
+}
+
+function go(id){
+  document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active",n.dataset.id===id));
+  $("#pageTitle").textContent=NAV.flatMap(g=>g.items).find(i=>i.id===id).name;
+  $("#pageCrumb").textContent="· "+CRUMB[id];
+  renderPanel(id);
+  $("#sidebar").classList.remove("open");$("#scrim").classList.remove("show");
+  window.scrollTo(0,0);
+}
+
+function renderPanel(id){
+  let html="";
+  if(id==="dash")html=panelDash();
+  else if(id==="proc")html=panelProc();
+  else if(id==="overdue")html=panelOverdue();
+  else if(id==="gantt")html=panelGantt();
+  else if(id==="raw")html=panelTable("raw","原始数据表","订单总数量","未到货","采购单价");
+  else if(id==="order")html=panelTable("order","订单明细（02）","总数量","未到货","金额");
+  else if(id==="contract")html=panelTable("contract","合同汇总（06）","总数量","金额","未到货");
+  else if(id==="redundancy")html=panelRedundancy();
+  else if(id==="products")html=panelTable("products","产品资料表","—","—","—");
+  else if(id==="shipping")html=panelTable("shipping","发货需求表","发货数量","—","—");
+  else if(id==="forecast")html=panelTable("forecast","销售预测表","Q3预计","—","—");
+  else if(id==="shipchk")html=panelShipchk();
+  else if(id==="params")html=panelParams();
+  else if(id==="backup")html=panelBackup();
+  content.innerHTML=`<section class="panel active">${html}</section>`;
+  if(id==="dash")afterDash();
+  if(id==="proc")afterProc();
+}
+
+/* ---- Dashboard ---- */
+function panelDash(){
+  const kpis=KPIS.map(k=>`
+    <div class="kpi">
+      <div class="lab">${k.lab}<span class="ic ${k.bg}" style="margin-left:auto">${k.ic}</span></div>
+      <div class="val">${k.val}<small>${k.unit}</small></div>
+      <div class="trend ${k.cls}">${k.trend}</div>
+    </div>`).join("");
+  return `
+    <div class="block-title">驾驶舱 · 关键指标</div>
+    <div class="block-sub">跟踪总览：在手交期、逾期风险与工序完成度一眼掌握</div>
+    <div class="kpi-grid">${kpis}</div>
+    <div class="charts">
+      <div class="card"><h3>工序完成率</h3><div id="donut"></div></div>
+      <div class="card"><h3>各厂商在手金额 Top10（万元）</h3><div id="facBars"></div></div>
+      <div class="card"><h3>逾期分档（合同数）</h3><div id="ovBars"></div></div>
+    </div>`;
+}
+function afterDash(){
+  donut($("#donut"),68.5,["#16A34A","#EEF3FF"]);
+  hbars($("#facBars"),FACTORY_TOP,"万元");
+  hbars($("#ovBars"),OV_BUCKETS,"个");
+}
+
+/* ---- 工序进度 (core) ---- */
+function panelProc(){
+  const cols=STAGES.map((s,i)=>`<th class="stage-head" title="${s}">${i+1}</th>`).join("");
+  return `
+    <div class="block-title">工序进度（03）· 独立数据源</div>
+    <div class="block-sub">数据独立维护：导入明细 → 按「产品编号+合同号」汇总；改原始数据不影响此处。</div>
+    <div class="toolbar">
+      <input id="pcSearch" placeholder="搜索合同号 / 产品 / SPU" style="height:36px;border:1px solid var(--border);border-radius:var(--r);padding:0 12px;width:240px">
+      <button class="btn" id="pcSearchBtn">搜索</button>
+      <button class="btn" id="pcTpl">下载模板</button>
+      <button class="btn" id="pcImp">从Excel导入</button>
+      <button class="btn btn-primary" id="pcBatch">批量更新工序进度</button>
+      <span class="hint" id="pcSel" style="margin-left:4px">已选 0 行</span>
+    </div>
+    <div class="filter-row">
+      <span class="fr-t">列名筛选：</span>
+      <label>合同号<input class="finput" id="fC" style="width:110px"></label>
+      <label>产品编号<input class="finput" id="fP" style="width:110px"></label>
+      <label>SPU<input class="finput" id="fS" style="width:90px"></label>
+      <label>工艺品类<input class="finput" id="fCat" style="width:90px"></label>
+      <label>检验重点<input class="finput" id="fI" style="width:110px"></label>
+      <button class="btn btn-sm" id="pcFbtn">筛选</button>
+      <button class="btn btn-sm btn-ghost" id="pcFreset">重置</button>
+    </div>
+    <div class="table-wrap proc-table"><table id="procTable">
+      <thead><tr>
+        <th class="row-check"><input type="checkbox" id="pcAll"></th>
+        <th>合同号</th><th>产品编号</th><th>SPU</th><th class="num">订单数量</th>
+        <th>合同日期</th><th>出货日期</th><th>工艺品类</th>
+        ${cols}
+        <th>当前工序</th><th>完成度</th><th>客诉点</th><th>检验重点</th><th>验货时间</th><th>验货结果</th><th>明细</th>
+      </tr></thead>
+      <tbody id="procBody"></tbody>
+    </table></div>
+    <div class="pager"><span>共 <b id="pcCount">0</b> 行聚合</span>
+      <div class="pg"><button class="cur">1</button><button>2</button><button>下一页</button></div></div>`;
+}
+let procSel=new Set();
+function renderProcBody(){
+  const rows=PROC_ROWS.map(r=>{
+    const cells=STAGES.map((s,i)=>`<span class="stage-cell ${STG_KEY[r.st[i]]}" data-pk="${r.pk}" data-st="${i}" title="${s}：${stName(r.st[i])}"></span>`).join("");
+    const checked=procSel.has(r.pk)?"checked":"";
+    return `<tr>
+      <td class="row-check"><input type="checkbox" class="pcchk" data-pk="${r.pk}" ${checked}></td>
+      <td>${r.contract}</td><td>${r.sku}</td><td>${r.spu}</td>
+      <td class="num">${r.qty}</td><td>${r.cd}</td><td>${r.sd}</td><td>${r.cat}</td>
+      <td>${cells}</td>
+      <td>${r.cur}</td>
+      <td><div style="display:flex;align-items:center"><div class="prog"><span style="width:${r.prog}%"></span></div><span class="prog-txt">${r.prog}%</span></div></td>
+      <td>${r.complaint||'<span style="color:var(--text-3)">—</span>'}</td>
+      <td><span class="pill info">${r.focus}</span></td>
+      <td>${r.it||'<span style="color:var(--text-3)">—</span>'}</td>
+      <td>${irPill(r.ir)}</td>
+      <td><span class="link" data-detail="${r.pk}">明细 ›</span></td>
+    </tr>`;
+  }).join("");
+  $("#procBody").innerHTML=rows;
+  $("#pcCount").textContent=PROC_ROWS.length;
+}
+function stName(k){return ["未开始","进行中","已完成","预警","逾期"][k];}
+function irPill(v){
+  if(v==="合格")return '<span class="pill success"><span class="d"></span>合格</span>';
+  if(v==="待验")return '<span class="pill neutral"><span class="d"></span>待验</span>';
+  if(v==="逾期")return '<span class="pill danger"><span class="d"></span>逾期</span>';
+  return '<span class="pill neutral"><span class="d"></span>—</span>';
+}
+function afterProc(){
+  renderProcBody();
+  $("#pcAll").onchange=e=>{PROC_ROWS.forEach(r=>e.target.checked?procSel.add(r.pk):procSel.delete(r.pk));renderProcBody();updSel();};
+  $$("#procBody .pcchk").forEach(c=>c.onchange=()=>{c.checked?procSel.add(c.dataset.pk):procSel.delete(c.dataset.pk);updSel();});
+  $$("#procBody .stage-cell").forEach(c=>c.onclick=()=>openStage(c.dataset.pk,+c.dataset.st));
+  $$("#procBody [data-detail]").forEach(b=>b.onclick=()=>openDetail(b.dataset.detail));
+  $("#pcBatch").onclick=openBatch;
+  $("#pcSel").onclick=()=>{};
+  $("#pcTpl").onclick=()=>toast("已生成导入模板（演示）");
+  $("#pcImp").onclick=()=>toast("请选择 Excel 明细文件（演示）");
+  $("#pcSearchBtn").onclick=()=>toast("搜索："+$("#pcSearch").value||"");
+  $("#pcFbtn").onclick=()=>toast("已按列名筛选（演示）");
+  $("#pcFreset").onclick=()=>{$("#fC").value=$("#fP").value=$("#fS").value=$("#fCat").value=$("#fI").value="";toast("已重置筛选")};
+}
+function updSel(){$("#pcSel").textContent="已选 "+procSel.size+" 行";$("#pcBatch").disabled=procSel.size===0;$("#pcBatch").style.opacity=procSel.size===0?.5:1;}
+
+/* ---- generic table panels ---- */
+function panelTable(id,title,col4,col5,col6){
+  const rows=SAMPLE_TABLES[id]||[];
+  const head=headFor(id);
+  const body=rows.map(r=>`<tr>${rowFor(id,r)}</tr>`).join("");
+  const tools=id==="products"||id==="shipping"||id==="forecast"
+    ? `<button class="btn">下载模板</button><button class="btn">从Excel导入</button><button class="btn btn-primary">+ 新增</button>`
+    : `<select class="filter"><option>跟单员(全部)</option></select><select class="filter"><option>运营组别(全部)</option></select><select class="filter"><option>厂商(全部)</option></select><input placeholder="搜索…" style="height:36px;border:1px solid var(--border);border-radius:var(--r);padding:0 12px;width:200px"><button class="btn">搜索</button>`;
+  return `
+    <div class="block-title">${title}</div>
+    <div class="block-sub">演示数据 ${rows.length} 行 · 清爽浅色表格模板</div>
+    <div class="toolbar"><div class="spacer"></div>${tools}</div>
+    <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="pager"><span>共 <b>${rows.length}</b> 条</span><div class="pg"><button class="cur">1</button><button>2</button><button>下一页</button></div></div>`;
+}
+function headFor(id){
+  const map={
+    raw:["合同号","产品编号","团队","跟单员","厂商","订单数量","未到货","采购单价","交货日期","状态"],
+    order:["合同号","产品编号","团队","跟单员","厂商","总数量","未到货","金额","交货日期"],
+    contract:["合同号","产品编号","厂商","跟单员","总数量","金额","未到货","交货日期","状态"],
+    redundancy:["维度","未到货金额","超期数","说明"],
+    products:["产品编号","中文品名","工艺品类","SPU"],
+    shipping:["产品编号","团队","运营专员","厂商","发货数量","发货时间"],
+    forecast:["产品编号","运营专员","Q3预计出货","备注"],
+    gantt:["合同号","产品编号","开始","结束","完成度","状态"],
+    shipchk:["产品编号","需求","供应","缺口","判定"]
+  };
+  return (map[id]||[]).map(h=>`<th>${h}</th>`).join("");
+}
+function rowFor(id,r){
+  const stp=v=>v==="逾期"?'<span class="pill danger"><span class="d"></span>逾期</span>':v==="进行中"?'<span class="pill info"><span class="d"></span>进行中</span>':v==="未开始"?'<span class="pill neutral"><span class="d"></span>未开始</span>':v==="满足"?'<span class="pill success"><span class="d"></span>满足</span>':v==="不足"?'<span class="pill danger"><span class="d"></span>不足</span>':'<span class="pill neutral"><span class="d"></span>'+v+'</span>';
+  const map={
+    raw:`<td>${r.c}</td><td>${r.sku}</td><td>${r.team}</td><td>${r.op}</td><td>${r.fac}</td><td class="num">${r.qty}</td><td class="num">${r.aq}</td><td class="num">${r.price}</td><td>${r.dd}</td><td>${stp(r.st)}</td>`,
+    order:`<td>${r.c}</td><td>${r.sku}</td><td>${r.team}</td><td>${r.op}</td><td>${r.fac}</td><td class="num">${r.total}</td><td class="num">${r.undeliv}</td><td class="num">${r.amt}</td><td>${r.dd}</td>`,
+    contract:`<td>${r.c}</td><td>${r.sku}</td><td>${r.fac}</td><td>${r.op}</td><td class="num">${r.total}</td><td class="num">${r.amt}</td><td class="num">${r.undeliv}</td><td>${r.deadline}</td><td>${stp(r.st)}</td>`,
+    redundancy:`<td>${r.key}</td><td class="num">${r.amt}</td><td class="num">${r.over}</td><td>${r.note}</td>`,
+    products:`<td>${r.code}</td><td>${r.name}</td><td>${r.cat}</td><td>${r.spu}</td>`,
+    shipping:`<td>${r.code}</td><td>${r.team}</td><td>${r.op}</td><td>${r.fac}</td><td class="num">${r.qty}</td><td>${r.date}</td>`,
+    forecast:`<td>${r.code}</td><td>${r.op}</td><td class="num">${r.q3}</td><td>${r.note}</td>`,
+    gantt:`<td>${r.c}</td><td>${r.sku}</td><td>${r.start}</td><td>${r.end}</td><td><div style="display:flex;align-items:center"><div class="prog"><span style="width:${r.prog}%"></span></div><span class="prog-txt">${r.prog}%</span></div></td><td>${stp(r.st)}</td>`,
+    shipchk:`<td>${r.code}</td><td class="num">${r.need}</td><td class="num">${r.supply}</td><td class="num">${r.gap}</td><td>${stp(r.ok)}</td>`
+  };
+  return map[id]||"";
+}
+
+/* ---- 逾期 ---- */
+function panelOverdue(){
+  return `
+    <div class="block-title">逾期呆滞</div>
+    <div class="block-sub">基准日 2026-08-19 · 逾期合同与金额风险预警</div>
+    <div class="toolbar"><div class="spacer"></div>
+      <select class="filter"><option>运营组别(全部)</option></select>
+      <select class="filter"><option>厂商(全部)</option></select>
+      <select class="filter"><option>逾期档(全部)</option><option>0-30天</option><option>31-90天</option><option>91-180天</option><option>365天+</option></select>
+    </div>
+    <div class="kpi-grid">
+      ${kpi("逾期合同数","23","个","↓ 较上周",false)}
+      ${kpi("逾期金额","86.4","万元","↑ 12.1%",true)}
+      ${kpi("超 90 天","20","个","需重点跟进",true)}
+    </div>
+    <div class="charts" style="margin-bottom:16px">
+      <div class="card"><h3>逾期分档(合同数)</h3><div id="ovBars2"></div></div>
+      <div class="card"><h3>逾期分档(金额,万元)</h3><div id="ovBars3"></div></div>
+    </div>
+    ${panelTable("raw","逾期明细","订单总数量","未到货","采购单价").replace('block-title">原始数据表','block-title">逾期明细')}
+  `;
+}
+function kpi(lab,val,unit,trend,bad){
+  return `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}<small>${unit}</small></div>
+    <div class="trend ${bad?'down':'up'}">${trend}</div></div>`;
+}
+/* ---- 合同冗余 ---- */
+function panelRedundancy(){
+  return `
+    <div class="block-title">合同冗余判定（11）</div>
+    <div class="block-sub">未到货金额降序 · 识别可调拨 / 接单冗余</div>
+    <div class="kpi-grid">
+      ${kpi("未到货总额","21,845","元","冗余占比 0.9%",false)}
+      ${kpi("冗余行数","25","行","待复核",false)}
+      ${kpi("超期未到货","2","项","建议跟进",true)}
+    </div>
+    <div class="charts" style="margin-bottom:16px"><div class="card"><h3>交付周期分档(金额)</h3><div id="cycBars"></div></div></div>
+    ${panelTable("redundancy","冗余明细","—","—","—")}
+  `;
+}
+/* ---- 甘特 ---- */
+function panelGantt(){
+  return `<div class="block-title">甘特图（04）· 22 周滚动</div>
+    <div class="block-sub">按合同交期排布，颜色深浅表示完成度</div>`+panelTable("gantt","排产计划","—","—","—");
+}
+/* ---- 发货判断 ---- */
+function panelShipchk(){
+  return `
+    <div class="block-title">发货需求判断（10）</div>
+    <div class="block-sub">窗口内需求 vs 未入库供应，差额≥0 即满足</div>
+    <div class="kpi-grid">
+      ${kpi("需求合计","259","件","窗口内",false)}
+      ${kpi("供应合计","135","件","未入库",false)}
+      ${kpi("缺口","124","件","不满足",true)}
+    </div>`+panelTable("shipchk","发货判断明细","—","—","—");
+}
+/* ---- 参数 ---- */
+function panelParams(){
+  return `
+    <div class="block-title">参数 · 字典 · 标准</div>
+    <div class="block-sub">单一真相源：修改此处，全局联动</div>
+    <div class="card" style="margin-bottom:16px"><h3>① 工序节拍（07）</h3>
+      <div class="table-wrap"><table><thead><tr><th>工艺品类</th><th>计划开工偏移 a</th><th>计划完工偏移 b</th><th>标准周期</th></tr></thead>
+      <tbody><tr><td>五金工具</td><td class="num">+3 天</td><td class="num">-5 天</td><td class="num">45 天</td></tr>
+      <tr><td>塑料件</td><td class="num">+2 天</td><td class="num">-4 天</td><td class="num">35 天</td></tr>
+      <tr><td>电子配件</td><td class="num">+5 天</td><td class="num">-7 天</td><td class="num">60 天</td></tr></tbody></table></div></div>
+    <div class="card" style="margin-bottom:16px"><h3>② 阈值与字典（08）</h3>
+      <div class="table-wrap"><table><thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+      <tbody><tr><td>逾期基准</td><td class="num">0 天</td><td>超过出货日即逾期</td></tr>
+      <tr><td>预警提前</td><td class="num">7 天</td><td>出货前 7 天标预警</td></tr>
+      <tr><td>冗余阈值</td><td class="num">0.9%</td><td>未到货/在手金额</td></tr></tbody></table></div></div>
+    <div class="card"><h3>③ 检验标准（09）— 产中检验参考</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${["来料检查","金加工阶段","半成品成型","喷塑环节","入箱前","产前样"].map(t=>`<span class="pill info">${t}</span>`).join("")}
+      </div></div>`;
+}
+/* ---- 备份 ---- */
+function panelBackup(){
+  return `<div class="block-title">数据备份</div>
+    <div class="block-sub">本地 SQLite · 自动保留最近 30 份</div>
+    <div class="backup-box"><p>数据存于本地 <code>tracker.db</code>。点下方按钮可立即备份一份带时间戳的副本到 <code>backups/</code> 目录（自动保留最近 30 份）。建议再配置计划任务每日自动备份，并同步到云盘以防单机损坏。</p>
+    <button class="btn btn-primary" onclick="toast('已备份至 backups/tracker_'+new Date().toISOString().slice(0,10)+'.db','success')">立即备份</button></div>`;
+}
+
+/* ============ Charts (SVG) ============ */
+function donut(el,pct,colors){
+  const r=52,c=2*Math.PI*r,off=c*(1-pct/100);
+  el.innerHTML=`<svg width="140" height="140" viewBox="0 0 140 140">
+    <circle cx="70" cy="70" r="${r}" fill="none" stroke="${colors[1]}" stroke-width="14"/>
+    <circle cx="70" cy="70" r="${r}" fill="none" stroke="${colors[0]}" stroke-width="14" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 70 70)"/>
+    <text x="70" y="66" text-anchor="middle" font-size="24" font-weight="600" fill="#1E2533">${pct}%</text>
+    <text x="70" y="88" text-anchor="middle" font-size="12" fill="#6B7488">完成率</text></svg>`;
+}
+function hbars(el,data,unit){
+  const max=Math.max(...data.map(d=>d[1]));
+  el.innerHTML=data.map(d=>{
+    const w=Math.round(d[1]/max*100);
+    return `<div class="bar-row"><div class="name">${d[0]}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div>
+      <div class="num">${d[1]}${unit}</div></div>`;
+  }).join("");
+}
+
+/* ============ Modals ============ */
+function openModal(id){$(id).classList.add("show");}
+function closeModal(el){el.classList.remove("show");}
+$$("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.closest(".modal")));
+$$(".modal").forEach(m=>m.onclick=e=>{if(e.target===m)closeModal(m);});
+
+function openStage(pk,stIdx){
+  const r=PROC_ROWS.find(x=>x.pk===pk);
+  $("#stageTitle").textContent=`录入工序 · ${r.contract}/${r.sku} · ${STAGES[stIdx]}`;
+  $("#stageBody").innerHTML=`
+    <div class="field"><label>状态</label>
+      <select id="stSel">${[["none","未开始"],["doing","进行中"],["done","已完成"],["warn","预警"],["over","逾期"]]
+        .map(o=>`<option value="${o[0]}" ${STG_KEY[r.st[stIdx]]===o[0]?'selected':''}>${o[1]}</option>`).join("")}</select></div>
+    <div class="field"><label>实际完成日期</label><input type="date" id="stDate" value="${new Date().toISOString().slice(0,10)}"></div>`;
+  $("#stageSave").onclick=()=>{
+    const v=$("#stSel").value;const k=Object.keys(STG_KEY).find(k=>STG_KEY[k]===v);
+    r.st[stIdx]=+k;
+    const done=r.st.filter(s=>s===2).length;r.prog=Math.round(done/STAGES.length*100);
+    renderProcBody();closeModal($("#stageModal"));toast("已更新 "+STAGES[stIdx]+" 状态","success");
+  };
+  openModal("#stageModal");
+}
+function openBatch(){
+  if(procSel.size===0){toast("请先勾选要更新的行","danger");return;}
+  $("#batchBody").innerHTML=`
+    <p class="hint" style="margin-bottom:14px">将统一设置 <b>${procSel.size}</b> 行的某工序状态。</p>
+    <div class="field"><label>目标工序</label><select id="bSt">${STAGES.map((s,i)=>`<option value="${i}">${i+1}. ${s}</option>`).join("")}</select></div>
+    <div class="field"><label>状态</label><select id="bStat">
+      <option value="doing">进行中</option><option value="done">已完成</option>
+      <option value="warn">预警</option><option value="over">逾期</option><option value="none">未开始</option></select></div>
+    <div class="field"><label>实际完成日期（留空=清除）</label><input type="date" id="bDate"></div>`;
+  $("#batchSave").onclick=()=>{
+    const si=+$("#bSt").value,v=$("#bStat").value,k=Object.keys(STG_KEY).find(k=>STG_KEY[k]===v);
+    procSel.forEach(pk=>{const r=PROC_ROWS.find(x=>x.pk===pk);r.st[si]=+k;
+      const done=r.st.filter(s=>s===2).length;r.prog=Math.round(done/STAGES.length*100);});
+    renderProcBody();closeModal($("#batchModal"));toast("已批量更新 "+procSel.size+" 行","success");
+  };
+  openModal("#batchModal");
+}
+function openDetail(pk){
+  const r=PROC_ROWS.find(x=>x.pk===pk);
+  $("#detailTitle").textContent=`导入明细 · ${r.contract}/${r.sku}`;
+  $("#detailBody").innerHTML=`<div class="table-wrap"><table class="detail-table">
+    <thead><tr><th>明细单号</th><th>数量</th><th>合同日期</th><th>出货日期</th></tr></thead>
+    <tbody>${r.detail.map(d=>`<tr><td>${d.po}</td><td class="num">${d.qty}</td><td>${d.cd}</td><td>${d.sd}</td></tr>`).join("")}</tbody></table></div>
+    <p class="hint" style="margin-top:12px">共 ${r.detail.length} 行明细 · 按「产品编号+合同号」汇总为上方一行。</p>`;
+  openModal("#detailModal");
+}
+
+/* ============ Toast ============ */
+function toast(msg,type="info"){
+  const t=document.createElement("div");t.className="toast "+(type==="success"?"success":type==="danger"?"danger":"");
+  const ic=type==="success"?"✅":type==="danger"?"⚠️":"🔔";
+  t.innerHTML=`<span class="ti">${ic}</span><span>${msg}</span>`;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>{t.style.opacity=0;t.style.transform="translateX(20px)";setTimeout(()=>t.remove(),250);},2600);
+}
+
+/* ============ init ============ */
+buildNav();
+go("dash");
+$("#hamburger").onclick=()=>{$("#sidebar").classList.toggle("open");$("#scrim").classList.toggle("show");};
+$("#scrim").onclick=()=>{$("#sidebar").classList.remove("open");$("#scrim").classList.remove("show");};
+$("#globalSearch").addEventListener("keydown",e=>{if(e.key==="Enter")toast("搜索："+e.target.value);});
+</script>
+</body>
+</html>

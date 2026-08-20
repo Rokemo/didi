@@ -15,6 +15,7 @@ let lastProcAllKeys = [];
 let lastProcAllTotal = 0;
 let procInspOptions = [];
 const INSPECTION_FOCUS_FALLBACK = ["金加工阶段","外发返厂","半成品成型","半成品备件","预组装阶段","入箱前","原材料到厂阶段","产前样","喷塑环节","来料检查","打磨/喷塑检验","预包装阶段","样品开发阶段","下料后","预加工","产前样组装测试"];
+let procStages = [];
 // 模块 tab 名 -> HTML DOM id 前缀（index.html 用短前缀 prod/ship/fc）
 const TAB_ID = { products: "prod", shipping: "ship", forecast: "fc" };
 
@@ -377,12 +378,14 @@ $("#odFactory").onchange = () => { odState.page = 1; loadOrderDetail(); };
 // ---- 工序进度（03）绑定 ----
 $("#pcSearchBtn").onclick = () => { pcState.search = $("#pcSearch").value.trim(); pcState.page = 1; loadProc(); };
 $("#pcSearch").onkeydown = (e) => { if (e.key === "Enter") $("#pcSearchBtn").click(); };
-$("#pcFilterBtn").onclick = () => { pcState.page = 1; loadProc(); };
-$("#pcFilterReset").onclick = () => {
-  ["pcFContract", "pcFProduct", "pcFSp", "pcFCat", "pcFInsp"].forEach((id) => { $("#" + id).value = ""; });
-  pcState.filters = {}; pcState.page = 1; loadProc();
-};
 $("#pcBatchBtn").onclick = () => openBatchStageModal();
+$("#pcColEditBtn").onclick = () => openColumnEditor();
+$("#ceClose").onclick = () => $("#ceModal").classList.add("hidden");
+$("#ceCancel").onclick = () => $("#ceModal").classList.add("hidden");
+// 点击弹层外部关闭
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".col-filter-pop") && !e.target.closest(".col-filter")) closeColFilterPop();
+});
 $("#pcBulkClose").onclick = () => $("#pcBulkModal").classList.add("hidden");
 $("#pcBulkCancel").onclick = () => $("#pcBulkModal").classList.add("hidden");
 $("#pcTplBtn").onclick = () => { window.location.href = "/api/proc/template"; };
@@ -619,65 +622,112 @@ function fmtNum(v) {
   return n.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 }
 
-async function loadProc() {
-  pcState.search = $("#pcSearch").value.trim();
-  pcState.filters = {
-    contract_no: $("#pcFContract").value.trim(),
-    product_code: $("#pcFProduct").value.trim(),
-    spu: $("#pcFSp").value.trim(),
-    craft_category: $("#pcFCat").value.trim(),
-    inspection_focus: $("#pcFInsp").value.trim(),
-  };
-  const params = new URLSearchParams({
-    page: pcState.page, size: pcState.size, search: pcState.search,
-    fc: pcState.filters.contract_no, fp: pcState.filters.product_code,
-    fs: pcState.filters.spu, fcat: pcState.filters.craft_category,
-    finsp: pcState.filters.inspection_focus,
+/* ====================================================
+   工序进度：列定义 + 列状态(可见/顺序/排序/筛选) + Excel 式列筛选 + 列名编辑
+   ==================================================== */
+const PC_COLUMNS = [
+  { k: "checkbox", label: "", type: "checkbox", hideable: false },
+  { k: "contract_no", label: "合同号", type: "text", filterable: true },
+  { k: "product_code", label: "产品编号", type: "text", filterable: true },
+  { k: "spu", label: "SPU", type: "text", filterable: true },
+  { k: "craft_category", label: "工艺品类", type: "text", filterable: true },
+  { k: "order_qty", label: "订单数量", type: "number", filterable: true },
+  { k: "contract_date", label: "合同日期", type: "date", filterable: true },
+  { k: "ship_date", label: "出货日期", type: "date", filterable: true },
+  { k: "customer_complaint", label: "产品主要客诉点", type: "edit_text", meta: "customer_complaint", filterable: true },
+  { k: "inspection_focus", label: "检验重点", type: "edit_select", meta: "inspection_focus", filterable: true },
+  { k: "inspection_time", label: "验货时间", type: "edit_date", meta: "inspection_time", filterable: true },
+  { k: "inspection_result", label: "验货结果", type: "edit_text", meta: "inspection_result", filterable: true },
+  { k: "stages", label: "工序进度（状态机）", type: "stages", filterable: false },
+  { k: "current", label: "当前工序", type: "text", filterable: true },
+  { k: "block", label: "卡点", type: "text", filterable: true },
+  { k: "progress", label: "完成度", type: "progress", filterable: true },
+  { k: "detail", label: "明细", type: "detail", filterable: false, hideable: false },
+  { k: "actions", label: "操作", type: "actions", filterable: false, hideable: false },
+];
+const PC_DEFAULT_ORDER = PC_COLUMNS.map((c) => c.k);
+const pcColState = { visible: {}, order: [], sort: { key: null, dir: null }, filters: {} };
+function loadColState() {
+  try {
+    const o = JSON.parse(localStorage.getItem("pc_col_state") || "{}");
+    pcColState.order = (Array.isArray(o.order) && o.order.length) ? o.order.slice() : PC_DEFAULT_ORDER.slice();
+    pcColState.visible = o.visible || {};
+    pcColState.sort = o.sort || { key: null, dir: null };
+    pcColState.filters = o.filters || {};
+  } catch (e) { pcColState.order = PC_DEFAULT_ORDER.slice(); }
+  PC_COLUMNS.forEach((c) => { if (!(c.k in pcColState.visible)) pcColState.visible[c.k] = true; });
+  PC_COLUMNS.forEach((c) => { if (!pcColState.order.includes(c.k)) pcColState.order.push(c.k); });
+}
+function saveColState() {
+  localStorage.setItem("pc_col_state", JSON.stringify({
+    visible: pcColState.visible, order: pcColState.order,
+    sort: pcColState.sort, filters: pcColState.filters
+  }));
+}
+function visCols() {
+  return pcColState.order.filter((k) => pcColState.visible[k] !== false)
+    .map((k) => PC_COLUMNS.find((c) => c.k === k)).filter(Boolean);
+}
+
+/* 渲染工序进度表：应用排序 + 列筛选 + 列可见性 */
+function renderProcTable() {
+  const rows = lastProcRows || [];
+  const cs = visCols();
+  let rs = rows.slice();
+  if (pcColState.sort.key && pcColState.sort.dir) {
+    const sk = pcColState.sort.key, dir = pcColState.sort.dir;
+    rs.sort((a, b) => {
+      if (sk === "progress") { const va = a.progress || 0, vb = b.progress || 0; return dir === "asc" ? va - vb : vb - va; }
+      const va = (a[sk] || "").toString(), vb = (b[sk] || "").toString();
+      return dir === "asc" ? va.localeCompare(vb, "zh-CN") : vb.localeCompare(va, "zh-CN");
+    });
+  }
+  Object.keys(pcColState.filters || {}).forEach((k) => {
+    const f = pcColState.filters[k]; if (!f) return;
+    if (f.values && f.values.size) rs = rs.filter((r) => f.values.has(String(r[k] || "")));
+    if (f.text) rs = rs.filter((r) => String(r[k] || "").toLowerCase().includes(f.text.toLowerCase()));
   });
-  const d = await apiJson("/api/proc?" + params.toString());
-  lastProcRows = d.rows;
-  lastProcAllKeys = d.all_keys || d.rows.map((r) => r.pkey);
-  procInspOptions = d.inspection_focus_options || INSPECTION_FOCUS_FALLBACK;
   const writer = currentRole !== "viewer";
-  const head = `<tr>
-    <th class="chk"><input type='checkbox' id='pcSelAll'></th>
-    <th>合同号</th><th>产品编号</th><th>SPU</th><th>工艺品类</th>
-    <th class="num">订单数量</th><th>合同日期</th><th>出货日期</th>
-    <th>产品主要客诉点</th><th>检验重点</th><th>验货时间</th><th>验货结果</th>
-    <th>工序进度（状态机）</th><th>当前工序</th><th>卡点</th><th class="num">完成度</th>
-    <th>明细</th><th>操作</th>
-  </tr>`;
-  let html = "<table><thead>" + head + "</thead><tbody>";
-  d.rows.forEach((r) => {
-    const chips = r.stages.map((s) => {
-      const cls = s.applicable ? ("stage-" + s.status) : "stage-na";
-      const title = `${s.name}｜计划开工:${s.plan_start || "-"}｜计划完工:${s.due || "-"}｜实际:${s.actual || "-"}`;
-      return `<span class="stg ${cls}" title="${esc(title)}" data-pkey="${esc(r.pkey)}" data-idx="${s.idx}">${esc(s.name)}</span>`;
-    }).join("");
-    const pct = (r.progress * 100).toFixed(0);
-    const sel = pcState.sel.has(r.pkey);
-    const inspOpts = ["<option value=''>—</option>"].concat(
-      procInspOptions.map((o) => `<option ${o === r.inspection_focus ? "selected" : ""}>${o}</option>`)).join("");
-    html += `<tr>`;
-    html += `<td class="chk"><input type='checkbox' class='pcSel' data-pkey='${esc(r.pkey)}' ${sel ? "checked" : ""}></td>`;
-    html += `<td>${esc(r.contract_no)}</td><td>${esc(r.product_code)}</td><td>${esc(r.spu)}</td><td>${esc(r.craft_category) || "待确认"}</td>`;
-    html += `<td class="num">${fmtNum(r.order_qty)}</td>`;
-    html += `<td>${esc(r.contract_date)}</td><td>${esc(r.ship_date)}</td>`;
-    html += `<td class="edit-cell"><input data-meta="customer_complaint" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}" value="${esc(r.customer_complaint)}" placeholder="点击填写"></td>`;
-    html += `<td class="edit-cell"><select data-meta="inspection_focus" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}">${inspOpts}</select></td>`;
-    html += `<td class="edit-cell"><input type="date" data-meta="inspection_time" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}" value="${esc(r.inspection_time)}"></td>`;
-    html += `<td class="edit-cell"><input data-meta="inspection_result" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}" value="${esc(r.inspection_result)}" placeholder="点击填写"></td>`;
-    html += `<td class="stg-row">${chips}</td><td>${esc(r.current) || "-"}</td><td>${esc(r.block)}</td><td class="num"><div class="pbar"><i style="width:${pct}%"></i></div><span class="pct">${pct}%</span></td>`;
-    html += `<td><button class="btn small" data-detail data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}">明细(${r.detail_count})</button></td>`;
-    html += `<td><button class="btn ${writer ? "primary" : ""}" data-proc="${esc(r.pkey)}" ${writer ? "" : "disabled title='只读'"}>${writer ? "录入实际完成" : "查看"}</button></td>`;
-    html += `</tr>`;
+  let head = "<tr>";
+  cs.forEach((c) => {
+    if (c.type === "checkbox") head += '<th class="chk"><input type="checkbox" id="pcSelAll"></th>';
+    else if (c.hideable === false) head += `<th>${esc(c.label)}</th>`;
+    else head += `<th>${esc(c.label)}<button class="col-filter" data-col-filter="${c.k}" aria-label="列筛选">▼</button></th>`;
+  });
+  head += "</tr>";
+  let html = `<table><thead>${head}</thead><tbody>`;
+  rs.forEach((r) => {
+    html += "<tr>";
+    cs.forEach((c) => {
+      const k = c.k;
+      if (c.type === "checkbox") html += `<td class="chk"><input type='checkbox' class='pcSel' data-pkey='${esc(r.pkey)}' ${pcState.sel.has(r.pkey) ? "checked" : ""}></td>`;
+      else if (c.type === "number") html += `<td class="num">${fmtNum(r[k])}</td>`;
+      else if (c.type === "edit_text") html += `<td class="edit-cell"><input data-meta="${c.meta}" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}" value="${esc(r[k])}" placeholder="点击填写"></td>`;
+      else if (c.type === "edit_select") {
+        const opts = ["<option value=''>—</option>"].concat(procInspOptions.map((o) => `<option ${o === r[k] ? "selected" : ""}>${esc(o)}</option>`)).join("");
+        html += `<td class="edit-cell"><select data-meta="${c.meta}" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}">${opts}</select></td>`;
+      }
+      else if (c.type === "edit_date") html += `<td class="edit-cell"><input type="date" data-meta="${c.meta}" data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}" value="${esc(r[k])}"></td>`;
+      else if (c.type === "stages") {
+        const chips = r.stages.map((s) => {
+          const cls = s.applicable ? ("stage-" + s.status) : "stage-na";
+          const t = `${s.name}｜计划开工:${s.plan_start || "-"}｜计划完工:${s.due || "-"}｜实际:${s.actual || "-"}`;
+          return `<span class="stg ${cls}" title="${esc(t)}" data-pkey="${esc(r.pkey)}" data-idx="${s.idx}">${esc(s.name)}</span>`;
+        }).join("");
+        html += `<td class="stg-row">${chips}</td>`;
+      }
+      else if (c.type === "progress") html += `<td class="num"><div class="pbar"><i style="width:${(r.progress * 100).toFixed(0)}%"></i></div><span class="pct">${(r.progress * 100).toFixed(0)}%</span></td>`;
+      else if (c.type === "detail") html += `<td><button class="btn small" data-detail data-pc="${esc(r.product_code)}" data-cn="${esc(r.contract_no)}">明细(${r.detail_count})</button></td>`;
+      else if (c.type === "actions") html += `<td><button class="btn ${writer ? "primary" : ""}" data-proc="${esc(r.pkey)}" ${writer ? "" : "disabled title='只读'"}>${writer ? "录入实际完成" : "查看"}</button></td>`;
+      else html += `<td>${esc(r[k])}</td>`;
+    });
+    html += "</tr>";
   });
   html += "</tbody></table>";
   $("#pcTableWrap").innerHTML = html;
-  // 全选
   const sa = $("#pcSelAll");
   if (sa) {
-    sa.checked = d.rows.length > 0 && d.rows.every((r) => pcState.sel.has(r.pkey));
+    sa.checked = rs.length > 0 && rs.every((r) => pcState.sel.has(r.pkey));
     sa.onchange = () => {
       $$("#pcTableWrap .pcSel").forEach((cb) => {
         const pk = cb.dataset.pkey;
@@ -692,7 +742,144 @@ async function loadProc() {
       $("#pcSelCount").textContent = `已选 ${pcState.sel.size} 行`;
     });
   }
+}
+
+/* 列筛选弹层（Excel 式：排序 + 按值筛选 + 隐藏） */
+function closeColFilterPop() {
+  document.querySelectorAll(".col-filter-pop").forEach((p) => p.remove());
+}
+function openColFilterPop(btn, key) {
+  closeColFilterPop();
+  const col = PC_COLUMNS.find((c) => c.k === key);
+  const rect = btn.getBoundingClientRect();
+  const pop = document.createElement("div");
+  pop.className = "col-filter-pop";
+  pop.dataset.colKey = key;
+  const cur = pcColState.sort;
+  const f = pcColState.filters[key] || {};
+  pop.innerHTML = `
+    <div class="cf-section">
+      <div class="cf-label">排序</div>
+      <button data-cf-sort="asc" class="${cur.key === key && cur.dir === "asc" ? "cur" : ""}">↑ 升序</button>
+      <button data-cf-sort="desc" class="${cur.key === key && cur.dir === "desc" ? "cur" : ""}">↓ 降序</button>
+      <button data-cf-sort="" class="${!(cur.key === key && cur.dir) ? "cur" : ""}">无</button>
+    </div>
+    ${col && col.filterable ? `
+    <div class="cf-section">
+      <div class="cf-label">按值筛选</div>
+      <input class="cf-text" placeholder="包含..." value="${esc(f.text || "")}">
+      <div class="cf-values" data-key="${key}"></div>
+    </div>` : ""}
+    <div class="cf-section cf-foot">
+      <button class="cf-hide">隐藏此列</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+  pop.style.left = rect.left + "px";
+  pop.style.top = (rect.bottom + 6) + "px";
+  if (pop.querySelector(".cf-values")) {
+    const vals = Array.from(new Set(lastProcRows.map((r) => String(r[key] || ""))))
+      .filter((v) => v !== "").sort((a, b) => a.localeCompare(b, "zh-CN"));
+    const f2 = pcColState.filters[key] || {};
+    const checkedAll = !f2.values || f2.values.size === 0 || f2.values.size === vals.length;
+    const wrap = pop.querySelector(".cf-values");
+    wrap.innerHTML = `<label class="cf-all"><input type="checkbox" data-cf-all ${checkedAll ? "checked" : ""}> 全选 (${vals.length})</label>` +
+      vals.map((v) => {
+        const on = f2.values && f2.values.size > 0 ? f2.values.has(v) : checkedAll;
+        return `<label><input type="checkbox" data-cf-val="${esc(v)}" ${on ? "checked" : ""}> ${esc(v)}</label>`;
+      }).join("");
+  }
+  pop.addEventListener("click", (e) => {
+    const s = e.target.closest("[data-cf-sort]");
+    if (s) {
+      pcColState.sort = s.dataset.cfSort ? { key, dir: s.dataset.cfSort } : { key: null, dir: null };
+      saveColState(); closeColFilterPop(); renderProcTable(); return;
+    }
+    const all = e.target.closest("[data-cf-all]");
+    if (all) {
+      const on = all.checked;
+      pop.querySelectorAll("[data-cf-val]").forEach((c) => c.checked = on);
+      applyCfVals(key, pop); return;
+    }
+    if (e.target.closest("[data-cf-val]")) { applyCfVals(key, pop); return; }
+    if (e.target.closest(".cf-hide")) {
+      pcColState.visible[key] = false;
+      saveColState(); closeColFilterPop(); renderProcTable(); return;
+    }
+  });
+  const ti = pop.querySelector(".cf-text");
+  if (ti) ti.addEventListener("input", (e) => {
+    if (!pcColState.filters[key]) pcColState.filters[key] = { values: null, text: "" };
+    pcColState.filters[key].text = e.target.value;
+    saveColState(); renderProcTable();
+  });
+}
+function applyCfVals(key, pop) {
+  const checks = pop.querySelectorAll("[data-cf-val]:checked");
+  const set = new Set(Array.from(checks).map((c) => c.dataset.cfVal));
+  if (!pcColState.filters[key]) pcColState.filters[key] = { values: null, text: "" };
+  pcColState.filters[key].values = set;
+  saveColState(); renderProcTable();
+}
+
+/* 列名编辑弹窗（统一管理：显示 + 顺序） */
+function openColumnEditor() {
+  $("#ceModalBody").innerHTML = `
+    <p class="hint small">勾选控制是否显示；点击 ↑↓ 调整顺序。设置存于浏览器本地（localStorage），不影响他人。</p>
+    <div class="ce-list" id="ceList"></div>
+    <div class="ce-actions"><button class="btn small" id="ceReset">重置默认</button></div>
+  `;
+  renderColEditor();
+  $("#ceReset").onclick = () => {
+    pcColState.order = PC_DEFAULT_ORDER.slice();
+    pcColState.visible = {}; PC_COLUMNS.forEach((c) => pcColState.visible[c.k] = true);
+    pcColState.sort = { key: null, dir: null }; pcColState.filters = {};
+    saveColState(); renderColEditor(); renderProcTable();
+  };
+  $("#ceModal").classList.remove("hidden");
+}
+function renderColEditor() {
+  const html = pcColState.order.map((k, i) => {
+    const c = PC_COLUMNS.find((x) => x.k === k);
+    if (!c || c.hideable === false) return "";
+    const vis = pcColState.visible[k] !== false;
+    const upDis = i === 0 ? "disabled" : "";
+    const dnDis = i === pcColState.order.length - 1 ? "disabled" : "";
+    return `<div class="ce-row" data-key="${k}">
+      <label class="ce-vis"><input type="checkbox" class="ce-chk" ${vis ? "checked" : ""}> 显示</label>
+      <span class="ce-label">${esc(c.label)}</span>
+      <button class="ce-up" ${upDis}>↑</button>
+      <button class="ce-down" ${dnDis}>↓</button>
+    </div>`;
+  }).join("");
+  $("#ceList").innerHTML = html;
+  $("#ceList").querySelectorAll(".ce-chk").forEach((c) => c.onchange = (e) => {
+    const key = e.target.closest(".ce-row").dataset.key;
+    pcColState.visible[key] = e.target.checked;
+    saveColState(); renderProcTable();
+  });
+  $("#ceList").querySelectorAll(".ce-up").forEach((b) => b.onclick = () => {
+    const key = b.closest(".ce-row").dataset.key;
+    const i = pcColState.order.indexOf(key);
+    if (i > 0) { pcColState.order.splice(i - 1, 0, pcColState.order.splice(i, 1)[0]); saveColState(); renderColEditor(); renderProcTable(); }
+  });
+  $("#ceList").querySelectorAll(".ce-down").forEach((b) => b.onclick = () => {
+    const key = b.closest(".ce-row").dataset.key;
+    const i = pcColState.order.indexOf(key);
+    if (i < pcColState.order.length - 1) { pcColState.order.splice(i + 1, 0, pcColState.order.splice(i, 1)[0]); saveColState(); renderColEditor(); renderProcTable(); }
+  });
+}
+
+async function loadProc() {
+  pcState.search = $("#pcSearch").value.trim();
+  const params = new URLSearchParams({ page: pcState.page, size: pcState.size, search: pcState.search });
+  const d = await apiJson("/api/proc?" + params.toString());
+  lastProcRows = d.rows;
+  lastProcAllKeys = d.all_keys || d.rows.map((r) => r.pkey);
+  procInspOptions = d.inspection_focus_options || INSPECTION_FOCUS_FALLBACK;
+  procStages = d.stages || [];
   $("#pcSelCount").textContent = `已选 ${pcState.sel.size} 行`;
+  renderProcTable();
   renderPager(d.total, d.page, d.size, "#pcPager", (p) => { pcState.page = p; loadProc(); });
 }
 
@@ -701,6 +888,8 @@ async function loadProc() {
   document.body.addEventListener("click", (e) => {
     const wrap = $("#pcTableWrap");
     if (!wrap || !wrap.contains(e.target)) return;
+    const cfBtn = e.target.closest && e.target.closest(".col-filter");
+    if (cfBtn) { openColFilterPop(cfBtn, cfBtn.dataset.colFilter); return; }
     const stg = e.target.closest && e.target.closest(".stg");
     if (stg) {
       if (currentRole === "viewer") return;
@@ -806,7 +995,7 @@ function saveProcMeta(pc, cn, field, val, el) {
 async function openBatchStageModal() {
   const writer = currentRole !== "viewer";
   if (!writer) { alert("当前为只读角色，无法批量更新"); return; }
-  const stages = INSPECTION_FOCUS_FALLBACK.map((n, i) => `<option value="${i}">${i + 1}. ${n}</option>`).join("");
+  const stages = procStages.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join("");
   const selCount = pcState.sel.size;
   const allCount = lastProcAllKeys.length;
   const body = `
@@ -835,11 +1024,6 @@ async function openBatchStageModal() {
     if (scope === "all") {
       body.scope = "all";
       body.search = pcState.search;
-      body.fc = pcState.filters.contract_no;
-      body.fp = pcState.filters.product_code;
-      body.fs = pcState.filters.spu;
-      body.fcat = pcState.filters.craft_category;
-      body.finsp = pcState.filters.inspection_focus;
     } else {
       body.pkeys = Array.from(pcState.sel);
     }
@@ -1145,6 +1329,7 @@ function bindTemplate(tab) {
   // 免登录模式：默认以管理员权限进入，无需账号密码
   currentRole = "admin";
   hideLogin();
+  loadColState();
   try { await refreshMe(); } catch (e) {}
   if (!currentRole) currentRole = "admin";
   applyRole();
